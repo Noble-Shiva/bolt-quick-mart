@@ -1,100 +1,271 @@
-import { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, TextInput, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, Dimensions } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Search as SearchIcon, X, SlidersHorizontal } from 'lucide-react-native';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { 
+  View, 
+  TextInput, 
+  FlatList, 
+  TouchableOpacity, 
+  StyleSheet,
+  ScrollView,
+  Platform
+} from 'react-native';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCart } from '@/context/CartContext';
+import { Search as SearchIcon, X, History, ArrowRight } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
-import { searchProducts, fetchCategories } from '@/api/products';
-import ProductCard from '@/components/search/ProductCard';
-import FilterModal from '@/components/search/FilterModal';
-import { debounce } from '@/utils/helpers';
 import { Text } from '@/components/ui';
-import { colors } from '@/utils/theme';
+import { searchProducts } from '@/api/products';
+import { debounce } from '@/utils/helpers';
+import SearchPredictionSkeleton from '@/components/search/SearchPredictionSkeleton';
+import ProductPredictionSkeleton from '@/components/search/ProductPredictionSkeleton';
+import ProductPredictionCard from '@/components/search/ProductPredictionCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Get screen width to calculate sidebar width (20% of screen)
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.2; // 20% of screen width
+const SEARCH_HISTORY_KEY = 'search_history';
+const MAX_HISTORY_ITEMS = 10;
+const MAX_TEXT_PREDICTIONS = 5;
+const MAX_PRODUCT_PREDICTIONS = 8;
+
+// Mock text predictions API
+const getTextPredictions = async (query: string): Promise<string[]> => {
+  // Simulate API delay
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  // Mock predictions based on query
+  const basePredictions = [
+    'fresh vegetables',
+    'fresh fruits',
+    'fresh milk',
+    'fresh bread',
+    'fresh meat',
+    'frozen pizza',
+    'frozen vegetables',
+    'frozen meals',
+    'organic products',
+    'organic vegetables'
+  ];
+  
+  return basePredictions
+    .filter(pred => pred.toLowerCase().includes(query.toLowerCase()))
+    .slice(0, MAX_TEXT_PREDICTIONS);
+};
 
 export default function SearchScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const { addToCart } = useCart();
   const { isDark } = useTheme();
+  const inputRef = useRef<TextInput>(null);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState(params.category || null);
-  const [loading, setLoading] = useState(false);
-  const [showFilterModal, setShowFilterModal] = useState(false);
-  const [filters, setFilters] = useState({
-    priceRange: [0, 100],
-    sortBy: 'popularity',
-    inStock: true,
-  });
+  const [textPredictions, setTextPredictions] = useState<string[]>([]);
+  const [productPredictions, setProductPredictions] = useState<any[]>([]);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   
+  // Load search history on mount
   useEffect(() => {
-    loadCategories();
+    loadSearchHistory();
+    if (Platform.OS === 'web') {
+      inputRef.current?.focus();
+    }
+  }, []);
+  
+  const loadSearchHistory = async () => {
+    try {
+      const history = await AsyncStorage.getItem(SEARCH_HISTORY_KEY);
+      if (history) {
+        setSearchHistory(JSON.parse(history));
+      }
+    } catch (error) {
+      console.error('Error loading search history:', error);
+    }
+  };
+  
+  const saveSearchHistory = async (query: string) => {
+    try {
+      const updatedHistory = [
+        query,
+        ...searchHistory.filter(item => item !== query)
+      ].slice(0, MAX_HISTORY_ITEMS);
+      
+      await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updatedHistory));
+      setSearchHistory(updatedHistory);
+    } catch (error) {
+      console.error('Error saving search history:', error);
+    }
+  };
+  
+  const clearSearchHistory = async () => {
+    try {
+      await AsyncStorage.removeItem(SEARCH_HISTORY_KEY);
+      setSearchHistory([]);
+    } catch (error) {
+      console.error('Error clearing search history:', error);
+    }
+  };
+  
+  const removeHistoryItem = async (query: string) => {
+    try {
+      const updatedHistory = searchHistory.filter(item => item !== query);
+      await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updatedHistory));
+      setSearchHistory(updatedHistory);
+    } catch (error) {
+      console.error('Error removing history item:', error);
+    }
+  };
+  
+  const fetchPredictions = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setTextPredictions([]);
+      setProductPredictions([]);
+      return;
+    }
     
-    if (params.category) {
-      setSelectedCategory(params.category);
-    }
-  }, [params.category]);
-  
-  useEffect(() => {
-    performSearch();
-  }, [selectedCategory, filters]);
-  
-  const loadCategories = async () => {
+    setIsLoading(true);
+    
     try {
-      const categoriesData = await fetchCategories();
-      setCategories(categoriesData);
+      const [textResults, productResults] = await Promise.all([
+        getTextPredictions(query),
+        searchProducts(query)
+      ]);
+      
+      setTextPredictions(textResults);
+      setProductPredictions(productResults.slice(0, MAX_PRODUCT_PREDICTIONS));
     } catch (error) {
-      console.error('Error loading categories:', error);
-    }
-  };
-  
-  const performSearch = async () => {
-    setLoading(true);
-    try {
-      const results = await searchProducts(searchQuery, selectedCategory, filters);
-      setProducts(results);
-    } catch (error) {
-      console.error('Error searching products:', error);
+      console.error('Error fetching predictions:', error);
+      setTextPredictions([]);
+      setProductPredictions([]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  };
+  }, []);
   
-  const debouncedSearch = useCallback(
-    debounce(() => {
-      performSearch();
-    }, 500),
-    [searchQuery, selectedCategory, filters]
+  const debouncedFetch = useCallback(
+    debounce((query: string) => fetchPredictions(query), 300),
+    [fetchPredictions]
   );
   
-  const handleSearchChange = (text) => {
+  const handleSearchChange = (text: string) => {
     setSearchQuery(text);
-    debouncedSearch();
+    debouncedFetch(text);
   };
   
-  const clearSearch = () => {
+  const handleClearSearch = () => {
     setSearchQuery('');
-    performSearch();
+    setTextPredictions([]);
+    setProductPredictions([]);
   };
   
-  const handleCategorySelect = (categoryId) => {
-    setSelectedCategory(categoryId === selectedCategory ? null : categoryId);
+  const handlePredictionPress = async (prediction: string) => {
+    await saveSearchHistory(prediction);
+    router.push({
+      pathname: '/search',
+      params: { query: prediction }
+    });
   };
   
-  const handleProductPress = (productId) => {
-    router.push(`/product/${productId}`);
+  const handleProductPress = async (product: any) => {
+    await saveSearchHistory(product.name);
+    router.push(`/product/${product.id}`);
   };
   
-  const applyFilters = (newFilters) => {
-    setFilters(newFilters);
-    setShowFilterModal(false);
+  const renderSearchHistory = () => {
+    if (!searchHistory.length) return null;
+    
+    return (
+      <View style={styles.historyContainer}>
+        <View style={styles.historyHeader}>
+          <View style={styles.historyTitleContainer}>
+            <History size={20} color={isDark ? '#BBBBBB' : '#666666'} />
+            <Text variant="body" weight="semibold" style={styles.historyTitle}>
+              Recent Searches
+            </Text>
+          </View>
+          
+          <TouchableOpacity onPress={clearSearchHistory}>
+            <Text variant="body-sm" weight="medium" color="accent">
+              Clear All
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        {searchHistory.map((query, index) => (
+          <TouchableOpacity
+            key={index}
+            style={styles.historyItem}
+            onPress={() => handlePredictionPress(query)}
+          >
+            <History size={16} color={isDark ? '#999999' : '#666666'} />
+            <Text variant="body" style={styles.historyText}>
+              {query}
+            </Text>
+            <TouchableOpacity
+              onPress={() => removeHistoryItem(query)}
+              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+            >
+              <X size={16} color={isDark ? '#999999' : '#666666'} />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+  
+  const renderPredictions = () => {
+    if (isLoading) {
+      return (
+        <ScrollView style={styles.predictionsContainer}>
+          <SearchPredictionSkeleton />
+          <ProductPredictionSkeleton />
+        </ScrollView>
+      );
+    }
+    
+    if (!searchQuery) {
+      return renderSearchHistory();
+    }
+    
+    return (
+      <ScrollView style={styles.predictionsContainer}>
+        {textPredictions.length > 0 && (
+          <View style={styles.section}>
+            <Text variant="body-sm" color="secondary" style={styles.sectionTitle}>
+              Suggestions
+            </Text>
+            
+            {textPredictions.map((prediction, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.predictionItem}
+                onPress={() => handlePredictionPress(prediction)}
+              >
+                <SearchIcon size={16} color={isDark ? '#999999' : '#666666'} />
+                <Text variant="body" style={styles.predictionText}>
+                  {prediction}
+                </Text>
+                <ArrowRight size={16} color={isDark ? '#999999' : '#666666'} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        
+        {productPredictions.length > 0 && (
+          <View style={styles.section}>
+            <Text variant="body-sm" color="secondary" style={styles.sectionTitle}>
+              Products
+            </Text>
+            
+            <View style={styles.productsGrid}>
+              {productPredictions.map((product) => (
+                <ProductPredictionCard
+                  key={product.id}
+                  product={product}
+                  onPress={() => handleProductPress(product)}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+      </ScrollView>
+    );
   };
 
   return (
@@ -102,20 +273,21 @@ export default function SearchScreen() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       
       <View style={[
-        styles.header, 
+        styles.header,
         { 
           backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF',
           borderBottomColor: isDark ? '#333333' : '#EEEEEE' 
         }
       ]}>
         <View style={[
-          styles.searchContainer, 
+          styles.searchContainer,
           { backgroundColor: isDark ? '#2A2A2A' : '#F5F5F5' }
         ]}>
           <SearchIcon size={20} color={isDark ? '#BBBBBB' : '#666666'} />
           <TextInput
+            ref={inputRef}
             style={[
-              styles.searchInput, 
+              styles.searchInput,
               { color: isDark ? '#FFFFFF' : '#333333' }
             ]}
             placeholder="Search for products..."
@@ -123,105 +295,17 @@ export default function SearchScreen() {
             value={searchQuery}
             onChangeText={handleSearchChange}
             returnKeyType="search"
+            autoFocus={Platform.OS === 'web'}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={clearSearch}>
+            <TouchableOpacity onPress={handleClearSearch}>
               <X size={20} color={isDark ? '#BBBBBB' : '#666666'} />
             </TouchableOpacity>
           )}
         </View>
-        
-        <TouchableOpacity 
-          style={[
-            styles.filterButton, 
-            { backgroundColor: isDark ? '#2A2A2A' : '#F5F5F5' }
-          ]}
-          onPress={() => setShowFilterModal(true)}
-        >
-          <SlidersHorizontal size={20} color={isDark ? '#FFFFFF' : '#333333'} />
-        </TouchableOpacity>
       </View>
       
-      <View style={styles.contentContainer}>
-        {/* Categories Sidebar - 20% width */}
-        <View style={[
-          styles.categoriesSidebar,
-          {
-            backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF',
-            borderRightColor: isDark ? '#333333' : '#EEEEEE',
-            width: SIDEBAR_WIDTH,
-          }
-        ]}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {categories.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.categoryItem,
-                  selectedCategory === item.id && styles.selectedCategoryItem,
-                  selectedCategory === item.id && { backgroundColor: isDark ? '#2A1A10' : colors.primary[50] }
-                ]}
-                onPress={() => handleCategorySelect(item.id)}
-              >
-                <View style={[
-                  styles.categoryIconContainer,
-                  { backgroundColor: isDark ? '#2A2A2A' : '#F0F0F0' }
-                ]}>
-                  <Text style={styles.categoryIcon}>{item.icon}</Text>
-                </View>
-                <Text
-                  variant="body-sm"
-                  weight={selectedCategory === item.id ? "semibold" : "regular"}
-                  color={selectedCategory === item.id ? 'accent' : 'primary'}
-                  style={styles.categoryName}
-                  numberOfLines={2}
-                >
-                  {item.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-        
-        {/* Products Grid - 80% width */}
-        <View style={styles.productsContainer}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary[700]} />
-            </View>
-          ) : (
-            <FlatList
-              data={products}
-              numColumns={2}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <ProductCard
-                  product={item}
-                  onPress={() => handleProductPress(item.id)}
-                  onAddToCart={() => addToCart(item)}
-                />
-              )}
-              contentContainerStyle={styles.productsList}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Text variant="body" color="secondary" style={styles.emptyText}>
-                    {searchQuery.length > 0
-                      ? 'No products found. Try a different search term or category.'
-                      : 'Search for products by name, category, or description.'}
-                  </Text>
-                </View>
-              }
-            />
-          )}
-        </View>
-      </View>
-      
-      <FilterModal
-        visible={showFilterModal}
-        filters={filters}
-        onClose={() => setShowFilterModal(false)}
-        onApply={applyFilters}
-      />
+      {renderPredictions()}
     </View>
   );
 }
@@ -231,88 +315,73 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
   },
   searchContainer: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 48,
-    marginRight: 12,
   },
   searchInput: {
     flex: 1,
     height: '100%',
+    marginLeft: 8,
     fontSize: 16,
     fontFamily: 'Poppins-Regular',
+  },
+  predictionsContainer: {
+    flex: 1,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  predictionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  predictionText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  productsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+  },
+  historyContainer: {
+    padding: 16,
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  historyTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  historyTitle: {
     marginLeft: 8,
   },
-  filterButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  contentContainer: {
-    flex: 1,
+  historyItem: {
     flexDirection: 'row',
-  },
-  categoriesSidebar: {
-    borderRightWidth: 1,
-    height: '100%',
-  },
-  categoryItem: {
+    alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  categoryIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  categoryIcon: {
-    fontSize: 16,
-  },
-  categoryName: {
-    textAlign: 'center',
-    fontSize: 10,
-  },
-  selectedCategoryItem: {
-    borderLeftWidth: 3,
-    borderLeftColor: colors.primary[600],
-  },
-  productsContainer: {
+  historyText: {
     flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  productsList: {
-    // padding: 8,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    marginTop: 40,
-  },
-  emptyText: {
-    textAlign: 'center',
+    marginLeft: 12,
   },
 });
