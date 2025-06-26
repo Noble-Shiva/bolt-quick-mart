@@ -16,7 +16,7 @@ A mobile e-commerce application built with React Native (Expo) and TypeScript.
 ## Tech Stack
 
 *   React Native
-*   Expo
+*   Expo SDK 53
 *   TypeScript
 *   Expo Router (for navigation)
 *   React Navigation (underlying navigation library)
@@ -34,7 +34,7 @@ Follow these instructions to get a copy of the project up and running on your lo
 
 *   Node.js (LTS version recommended)
 *   npm (comes with Node.js) or Yarn
-*   Expo CLI: `npm install -g expo-cli` (if not already installed)
+*   Expo CLI: `npm install -g @expo/cli` (latest version)
 
 ### Installation
 
@@ -120,6 +120,7 @@ quickmart/
 ├── app.json          # Expo configuration file.
 ├── package.json      # Project metadata, dependencies, and scripts.
 ├── tsconfig.json     # TypeScript configuration.
+├── expo-env.d.ts     # Expo environment type definitions.
 └── README.md         # This file.
 ```
 
@@ -134,6 +135,22 @@ quickmart/
 *   **`context/`**: Holds React Context files for managing global application state (e.g., `AuthContext.tsx` for user authentication status, `CartContext.tsx` for shopping cart data).
 *   **`hooks/`**: For custom React Hooks that encapsulate reusable logic.
 *   **`utils/`**: Contains utility functions, helper scripts, and global configurations like theme settings (`theme.ts`).
+
+## Migration to Expo SDK 53
+
+This project has been updated to use Expo SDK 53, which includes:
+
+- Updated dependencies to their latest compatible versions
+- Enhanced TypeScript configuration
+- Improved performance and stability
+- Better web support
+- Updated React Native to 0.76.8
+
+### Breaking Changes
+
+- Some deprecated APIs have been removed
+- Updated minimum Node.js version requirements
+- Enhanced type safety with stricter TypeScript configuration
 
 ## Contributing
 
