@@ -142,21 +142,21 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          href: { pathname: '/' },
+          href: '/',
         }}
       />
       <Tabs.Screen
         name="search"
         options={{
           title: 'Search',
-          href: { pathname: '/search' },
+          href: '/search',
         }}
       />
       <Tabs.Screen
         name="cart"
         options={{
           title: 'Cart',
-          href: { pathname: '/cart' },
+          href: '/cart',
           tabBarIcon: ({ color, size, focused }) => (
             <>
               <AnimatedIcon 
@@ -174,21 +174,21 @@ export default function TabLayout() {
         name="support"
         options={{
           title: 'Support',
-          href: { pathname: '/support' },
+          href: '/support',
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
-          href: { pathname: '/profile' },
+          href: '/profile',
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          href: { pathname: '/settings' },
+          href: '/settings',
         }}
       />
     </Tabs>
