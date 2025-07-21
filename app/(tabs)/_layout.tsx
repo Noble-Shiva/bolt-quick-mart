@@ -4,6 +4,7 @@ import { Animated, Platform } from 'react-native';
 import { useCart } from '@/context/CartContext';
 import CartBadge from '@/components/cart/CartBadge';
 import { useTheme } from '@/context/ThemeContext';
+import { colors } from '@/utils/theme';
 
 // Import icons from lucide-react-native
 import { Chrome as Home, Search, ShoppingBag, MessageCircle, User, Settings } from 'lucide-react-native';
@@ -89,7 +90,7 @@ const AnimatedIcon = ({
 };
 
 export default function TabLayout() {
-  const { isDark, colors } = useTheme();
+  const { isDark } = useTheme();
   const { totalItems } = useCart();
   
   return (
