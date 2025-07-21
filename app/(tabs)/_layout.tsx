@@ -7,7 +7,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { colors } from '@/utils/theme';
 
 // Import icons from lucide-react-native
-import { Chrome as Home, Search, ShoppingBag, MessageCircle, User, Settings } from 'lucide-react-native';
+import { Chrome as Home, Search, ShoppingBag, MessageCircle, User, Settings, Tag } from 'lucide-react-native';
 
 // Custom animated icon component
 const AnimatedIcon = ({ 
@@ -122,6 +122,8 @@ export default function TabLayout() {
             Icon = Search;
           } else if (route.name === 'cart') {
             Icon = ShoppingBag;
+          } else if (route.name === 'offers') {
+            Icon = Tag;
           } else if (route.name === 'support') {
             Icon = MessageCircle;
           } else if (route.name === 'profile') {
@@ -167,6 +169,12 @@ export default function TabLayout() {
               {totalItems > 0 && <CartBadge count={totalItems} />}
             </>
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="offers"
+        options={{
+          title: 'Offers',
         }}
       />
       <Tabs.Screen
